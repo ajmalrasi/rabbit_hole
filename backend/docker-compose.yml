@@ -1,0 +1,49 @@
+# Rabbit Hole backend stack.
+# Designed to run on a Jetson Orin Nano (linux/arm64). Both images below are
+# multi-arch and pull their arm64 variants automatically.
+
+services:
+  db:
+    # pgvector image bundles PostgreSQL 16 + the `vector` extension and ships
+    # an arm64 manifest, so it works out of the box on the Jetson.
+    image: pgvector/pgvector:pg16
+    container_name: rabbit_hole_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-rabbit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rabbit_secret_change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-rabbit_hole}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-rabbit} -d ${POSTGRES_DB:-rabbit_hole}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rabbit-hole-backend:latest
+    container_name: rabbit_hole_api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Override host so the API talks to the db service inside the compose network.
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    # Lets the container reach an Ollama server running on the Jetson host itself.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  postgres-data:
