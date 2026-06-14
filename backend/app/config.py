@@ -73,6 +73,13 @@ class Settings(BaseSettings):
     run_on_startup: bool = True
     daily_feed_size: int = 20
 
+    # ----- RSS cache -----
+    # Directory for on-disk feed cache. Set to "" to disable caching.
+    # Inside Docker this maps to a volume mount so cache survives restarts.
+    rss_cache_dir: str = "/tmp/rss_cache"
+    # Age in minutes before a cached feed is considered stale.
+    rss_cache_ttl_minutes: int = 60
+
     # HTTP timeout (seconds) for outbound LLM / RSS calls
     http_timeout: float = 120.0
 

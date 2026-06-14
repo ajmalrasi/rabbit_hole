@@ -36,7 +36,7 @@ class RabbitHole(Base, TimestampMixin):
     interesting_fact: Mapped[str] = mapped_column(Text)
     why_it_matters: Mapped[str] = mapped_column(Text)
     follow_up_question: Mapped[str] = mapped_column(Text)
-    category: Mapped[str] = mapped_column(String(64), index=True)
+    category: Mapped[str] = mapped_column(String(64))
     source_url: Mapped[str] = mapped_column(String(2048))
 
     # Scoring (carried over from the source article for ranking).
@@ -49,7 +49,7 @@ class RabbitHole(Base, TimestampMixin):
     )
 
     # Feed membership.
-    in_feed: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    in_feed: Mapped[bool] = mapped_column(Boolean, default=False)
     feed_rank: Mapped[Optional[int]] = mapped_column(nullable=True)
 
     article: Mapped[Optional["Article"]] = relationship(  # noqa: F821

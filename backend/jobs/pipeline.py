@@ -25,7 +25,7 @@ from services.embedding_service import EmbeddingService
 from services.feed_service import FeedService
 from services.llm.factory import get_embedding_provider, get_llm_provider
 from services.rabbit_hole_service import RabbitHoleService
-from services.rss_service import RSSService
+from services.rss_service import make_rss_service
 
 logger = get_logger(__name__)
 
@@ -54,7 +54,7 @@ class ContentPipeline:
 
     async def ingest(self) -> int:
         with session_scope() as session:
-            rss = RSSService(ArticleRepository(session))
+            rss = make_rss_service(ArticleRepository(session))
             return await rss.ingest()
 
     async def score_pending(self, result: PipelineResult) -> None:
@@ -102,8 +102,16 @@ class ContentPipeline:
             feed_service = FeedService(RabbitHoleRepository(session), self._settings)
             result.feed_size = feed_service.generate_daily_feed()
 
-    async def run(self, *, do_ingest: bool = True) -> PipelineResult:
-        """Run the full pipeline and return a summary of what happened."""
+    async def run(
+        self, *, do_ingest: bool = True, do_score: bool = True, do_generate: bool = True
+    ) -> PipelineResult:
+        """Run the full pipeline and return a summary of what happened.
+
+        Each stage is independently toggleable:
+        - ``do_ingest``   – fetch RSS feeds and store raw articles
+        - ``do_score``    – curiosity-score NEW articles
+        - ``do_generate`` – generate rabbit holes for SCORED articles
+        """
         result = PipelineResult()
         logger.info("=== Pipeline run started ===")
 
@@ -114,17 +122,19 @@ class ContentPipeline:
                 logger.exception("Ingestion stage failed")
                 result.errors.append(f"ingest: {exc}")
 
-        try:
-            await self.score_pending(result)
-        except Exception as exc:
-            logger.exception("Scoring stage failed")
-            result.errors.append(f"score: {exc}")
+        if do_score:
+            try:
+                await self.score_pending(result)
+            except Exception as exc:
+                logger.exception("Scoring stage failed")
+                result.errors.append(f"score: {exc}")
 
-        try:
-            await self.generate_pending(result)
-        except Exception as exc:
-            logger.exception("Generation stage failed")
-            result.errors.append(f"generate: {exc}")
+        if do_generate:
+            try:
+                await self.generate_pending(result)
+            except Exception as exc:
+                logger.exception("Generation stage failed")
+                result.errors.append(f"generate: {exc}")
 
         try:
             self.rebuild_feed(result)

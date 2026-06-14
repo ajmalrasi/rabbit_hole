@@ -48,7 +48,6 @@ class Article(Base, TimestampMixin):
     status: Mapped[ArticleStatus] = mapped_column(
         SAEnum(ArticleStatus, name="article_status"),
         default=ArticleStatus.NEW,
-        index=True,
     )
 
     # Curiosity scoring results (populated by the scoring service).

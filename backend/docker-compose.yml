@@ -41,9 +41,15 @@ services:
         condition: service_healthy
     ports:
       - "8000:8000"
+    volumes:
+      # Persist RSS cache across container restarts so feeds aren't re-downloaded.
+      - rss-cache:/data/rss_cache
+    environment:
+      RSS_CACHE_DIR: /data/rss_cache
     # Lets the container reach an Ollama server running on the Jetson host itself.
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
 volumes:
   postgres-data:
+  rss-cache:

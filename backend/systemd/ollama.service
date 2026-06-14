@@ -1,0 +1,51 @@
+# Ollama service for Jetson Orin Nano.
+#
+# Install:
+#   sudo cp ollama.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ollama
+#
+# The service starts Ollama BEFORE Docker so it can claim contiguous GPU memory
+# before the Docker daemon and other services fragment the address space.
+# Order: ollama → docker → rabbit_hole (via docker compose)
+#
+# GPU notes:
+#   - On Jetson, OLLAMA_HOST=0.0.0.0 is required so Docker containers can reach
+#     it via the host's LAN IP (192.168.3.30:11434).
+#   - OLLAMA_KEEP_ALIVE=10m keeps the model warm between pipeline runs.
+#   - If GPU OOM errors occur after a long uptime, restart this service first:
+#       sudo systemctl restart ollama
+
+[Unit]
+Description=Ollama LLM server
+After=network-online.target
+Wants=network-online.target
+Before=docker.service
+
+[Service]
+Type=simple
+User=ajmalrasi
+Group=ajmalrasi
+ExecStart=/home/ajmalrasi/.local/bin/ollama serve
+Restart=on-failure
+RestartSec=5
+
+# Listen on all interfaces so Docker containers can reach the Jetson host.
+Environment=OLLAMA_HOST=0.0.0.0:11434
+# Keep models warm between pipeline runs (pipeline runs every 3 h by default).
+Environment=OLLAMA_KEEP_ALIVE=15m
+# Limit context window to reduce GPU memory pressure.
+Environment=OLLAMA_CONTEXT_LENGTH=2048
+# Log level: INFO or DEBUG
+Environment=OLLAMA_DEBUG=INFO
+
+# Uncomment the line below ONLY if you need CPU fallback (much slower).
+# This is set automatically if GPU OOM persists after a clean reboot.
+#Environment=OLLAMA_IGPU_ENABLE=0
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ollama
+
+[Install]
+WantedBy=multi-user.target
