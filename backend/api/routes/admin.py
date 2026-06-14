@@ -20,14 +20,20 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 @router.post("/pipeline/run")
-async def run_pipeline(background_tasks: BackgroundTasks, ingest: bool = True) -> dict:
+async def run_pipeline(
+    background_tasks: BackgroundTasks, ingest: bool = True, drain: bool = False
+) -> dict:
     """Full pipeline (ingest + score + generate + feed rebuild) in the background."""
 
     async def _run() -> None:
-        await ContentPipeline().run(do_ingest=ingest)
+        await ContentPipeline().run(do_ingest=ingest, drain=drain)
 
     background_tasks.add_task(_run)
-    return {"status": "scheduled", "stages": {"ingest": ingest, "score": True, "generate": True}}
+    return {
+        "status": "scheduled",
+        "stages": {"ingest": ingest, "score": True, "generate": True},
+        "drain": drain,
+    }
 
 
 @router.post("/pipeline/fetch")
@@ -42,14 +48,20 @@ async def fetch_feeds(background_tasks: BackgroundTasks) -> dict:
 
 
 @router.post("/pipeline/process")
-async def process_articles(background_tasks: BackgroundTasks) -> dict:
-    """Score and generate from articles already in DB. No network fetch."""
+async def process_articles(background_tasks: BackgroundTasks, drain: bool = True) -> dict:
+    """Score and generate from articles already in DB until the queue is empty."""
 
     async def _run() -> None:
-        await ContentPipeline().run(do_ingest=False, do_score=True, do_generate=True)
+        await ContentPipeline().run(
+            do_ingest=False, do_score=True, do_generate=True, drain=drain
+        )
 
     background_tasks.add_task(_run)
-    return {"status": "scheduled", "stages": {"ingest": False, "score": True, "generate": True}}
+    return {
+        "status": "scheduled",
+        "stages": {"ingest": False, "score": True, "generate": True},
+        "drain": drain,
+    }
 
 
 @router.post("/feed/rebuild")

@@ -48,11 +48,15 @@ class OllamaProvider(LLMProvider):
             payload["system"] = system
         if json_mode:
             payload["format"] = "json"
+            # Qwen3 thinking models emit structured output in ``thinking`` unless
+            # disabled; turn off chain-of-thought for JSON scoring/generation.
+            payload["think"] = False
 
         resp = await self._client.post(f"{self._base_url}/api/generate", json=payload)
         resp.raise_for_status()
         data = resp.json()
-        return (data.get("response") or "").strip()
+        text = (data.get("response") or data.get("thinking") or "").strip()
+        return text
 
     @retry(
         stop=stop_after_attempt(3),

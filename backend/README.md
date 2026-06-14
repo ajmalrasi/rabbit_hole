@@ -122,10 +122,11 @@ All configuration is via environment variables (see `.env.example`). Highlights:
 | `MIN_CURIOSITY_SCORE`        | gate threshold (0–10)                            | 6.0     |
 | `MIN_HIDDEN_MECHANISM_SCORE` | gate threshold (0–10)                            | 6.0     |
 | `DEDUP_DISTANCE_THRESHOLD`   | cosine distance below which → duplicate           | 0.15    |
-| `INGEST_INTERVAL_MINUTES`    | how often the full pipeline runs                 | 180     |
-| `DAILY_FEED_HOUR`            | hour (UTC) for the daily feed rebuild            | 6       |
+| `DAILY_PIPELINE_HOUR`        | hour (UTC) for the once-daily full pipeline      | 6       |
+| `DAILY_PIPELINE_MINUTE`      | minute (UTC) for the daily pipeline              | 0       |
 | `DAILY_FEED_SIZE`            | items in the daily feed                          | 20      |
-| `RUN_ON_STARTUP`             | run one pipeline pass shortly after boot         | true    |
+| `PIPELINE_DRAIN_ON_PROCESS`  | drain all pending articles on manual `/process`  | true    |
+| `RUN_ON_STARTUP`             | run pipeline once after boot                     | false   |
 
 The text and embedding providers are independent — e.g. use local Ollama for
 embeddings and remote OpenAI for generation.

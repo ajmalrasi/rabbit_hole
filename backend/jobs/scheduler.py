@@ -5,7 +5,6 @@ import asyncio
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.interval import IntervalTrigger
 
 from app.config import Settings, get_settings
 from app.logging_config import get_logger
@@ -22,41 +21,27 @@ class PipelineScheduler:
         self._scheduler = AsyncIOScheduler(timezone="UTC")
         self._pipeline = ContentPipeline(self._settings)
 
-    async def _run_pipeline(self) -> None:
+    async def _run_daily_pipeline(self) -> None:
+        """Once-daily: fetch RSS, score, generate rabbit holes, rebuild feed."""
         try:
-            await self._pipeline.run(do_ingest=True)
+            await self._pipeline.run(
+                do_ingest=True,
+                do_score=True,
+                do_generate=True,
+                drain=True,
+            )
         except Exception:  # pragma: no cover - safety net for scheduled runs
-            logger.exception("Scheduled pipeline run failed")
-
-    async def _run_feed_only(self) -> None:
-        try:
-            await asyncio.to_thread(self._rebuild_feed_sync)
-        except Exception:  # pragma: no cover
-            logger.exception("Scheduled feed rebuild failed")
-
-    def _rebuild_feed_sync(self) -> None:
-        from jobs.pipeline import PipelineResult
-
-        self._pipeline.rebuild_feed(PipelineResult())
+            logger.exception("Scheduled daily pipeline run failed")
 
     def start(self) -> None:
-        # Periodic full pipeline (ingest + score + generate + feed).
-        self._scheduler.add_job(
-            self._run_pipeline,
-            trigger=IntervalTrigger(minutes=self._settings.ingest_interval_minutes),
-            id="content_pipeline",
-            name="Ingest + score + generate + feed",
-            max_instances=1,
-            coalesce=True,
-            replace_existing=True,
-        )
+        hour = self._settings.daily_pipeline_hour
+        minute = self._settings.daily_pipeline_minute
 
-        # Dedicated daily feed rebuild at a fixed hour.
         self._scheduler.add_job(
-            self._run_feed_only,
-            trigger=CronTrigger(hour=self._settings.daily_feed_hour, minute=0),
-            id="daily_feed",
-            name="Daily feed rebuild",
+            self._run_daily_pipeline,
+            trigger=CronTrigger(hour=hour, minute=minute),
+            id="daily_pipeline",
+            name="Daily ingest + score + generate + feed",
             max_instances=1,
             coalesce=True,
             replace_existing=True,
@@ -64,19 +49,18 @@ class PipelineScheduler:
 
         self._scheduler.start()
         logger.info(
-            "Scheduler started: pipeline every %d min, daily feed at %02d:00 UTC",
-            self._settings.ingest_interval_minutes,
-            self._settings.daily_feed_hour,
+            "Scheduler started: daily pipeline at %02d:%02d UTC",
+            hour,
+            minute,
         )
 
         if self._settings.run_on_startup:
-            # Kick off an initial run shortly after boot without blocking startup.
             asyncio.create_task(self._delayed_initial_run())
 
     async def _delayed_initial_run(self) -> None:
         await asyncio.sleep(5)
         logger.info("Running initial pipeline pass on startup")
-        await self._run_pipeline()
+        await self._run_daily_pipeline()
 
     def shutdown(self) -> None:
         if self._scheduler.running:

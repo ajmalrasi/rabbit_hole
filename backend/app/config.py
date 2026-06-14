@@ -67,10 +67,14 @@ class Settings(BaseSettings):
     min_hidden_mechanism_score: float = 6.0
 
     # ----- Pipeline / scheduler -----
-    ingest_interval_minutes: int = 180
-    daily_feed_hour: int = 6
+    # Hour (UTC) for the once-daily pipeline: ingest RSS → score → generate → feed.
+    daily_pipeline_hour: int = 6
+    daily_pipeline_minute: int = 0
     max_articles_per_run: int = 60
-    run_on_startup: bool = True
+    # When True, /admin/pipeline/process loops until NEW and SCORED queues are empty.
+    # Scheduled runs still use one batch per cycle to keep Jetson runs bounded.
+    pipeline_drain_on_process: bool = True
+    run_on_startup: bool = False
     daily_feed_size: int = 20
 
     # ----- RSS cache -----
