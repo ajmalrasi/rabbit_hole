@@ -36,6 +36,7 @@ services:
       # Override host so the API talks to the db service inside the compose network.
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
+      RSS_CACHE_DIR: /data/rss_cache
     depends_on:
       db:
         condition: service_healthy
@@ -44,8 +45,6 @@ services:
     volumes:
       # Persist RSS cache across container restarts so feeds aren't re-downloaded.
       - rss-cache:/data/rss_cache
-    environment:
-      RSS_CACHE_DIR: /data/rss_cache
     # Lets the container reach an Ollama server running on the Jetson host itself.
     extra_hosts:
       - "host.docker.internal:host-gateway"
