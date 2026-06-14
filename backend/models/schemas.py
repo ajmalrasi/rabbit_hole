@@ -80,8 +80,20 @@ class FeedResponse(BaseModel):
     """Paginated daily feed payload."""
 
     count: int
+    total: int
     generated_at: datetime
     items: list[RabbitHoleSummary]
+
+
+class AskRequest(BaseModel):
+    """User follow-up question about a rabbit hole."""
+
+    question: str = Field(min_length=1, max_length=500)
+
+
+class AskResponse(BaseModel):
+    answer: str
+    provider: str
 
 
 class CategoryCount(BaseModel):
@@ -112,3 +124,58 @@ class HealthResponse(BaseModel):
     llm_provider: str
     embedding_provider: str
     database: str
+
+
+# --------------------------------------------------------------------------- #
+# Admin / operational schemas
+# --------------------------------------------------------------------------- #
+
+
+class PipelineCounters(BaseModel):
+    ingested: int = 0
+    scored: int = 0
+    passed: int = 0
+    rejected: int = 0
+    generated: int = 0
+    duplicates: int = 0
+    failed: int = 0
+    feed_size: int = 0
+
+
+class PipelineRunState(BaseModel):
+    running: bool
+    stage: str
+    stage_total: int
+    stage_processed: int
+    stage_elapsed_seconds: float
+    stage_eta_seconds: Optional[float] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    run_elapsed_seconds: Optional[float] = None
+    drain: bool
+    counters: PipelineCounters
+    errors: list[str] = Field(default_factory=list)
+
+
+class ArticleStatusCounts(BaseModel):
+    new: int = 0
+    scored: int = 0
+    rejected: int = 0
+    generated: int = 0
+    duplicate: int = 0
+    failed: int = 0
+
+
+class AdminStatusResponse(BaseModel):
+    """Everything the admin panel needs in a single payload."""
+
+    app: str
+    version: str
+    llm_provider: str
+    embedding_provider: str
+    database: str
+    daily_feed_size: int
+    total_rabbit_holes: int
+    feed_count: int
+    articles: ArticleStatusCounts
+    pipeline: PipelineRunState

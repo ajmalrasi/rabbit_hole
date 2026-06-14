@@ -14,15 +14,30 @@ class RabbitHoleRepository(BaseRepository[RabbitHole]):
 
     # ----- listing / retrieval -----
 
-    def list_feed(self, limit: int = 20, offset: int = 0) -> list[RabbitHole]:
+    def list_feed(
+        self, limit: int = 20, offset: int = 0, category: str | None = None
+    ) -> list[RabbitHole]:
+        stmt = self._feed_select(category)
         stmt = (
-            select(RabbitHole)
-            .where(RabbitHole.in_feed.is_(True))
-            .order_by(RabbitHole.feed_rank.asc().nullslast(), RabbitHole.id.desc())
+            stmt.order_by(RabbitHole.feed_rank.asc().nullslast(), RabbitHole.id.desc())
             .limit(limit)
             .offset(offset)
         )
         return list(self.session.scalars(stmt).all())
+
+    def count_feed(self, category: str | None = None) -> int:
+        stmt = select(func.count()).select_from(RabbitHole).where(
+            RabbitHole.in_feed.is_(True)
+        )
+        if category:
+            stmt = stmt.where(func.lower(RabbitHole.category) == category.lower())
+        return self.session.scalar(stmt) or 0
+
+    def _feed_select(self, category: str | None = None):
+        stmt = select(RabbitHole).where(RabbitHole.in_feed.is_(True))
+        if category:
+            stmt = stmt.where(func.lower(RabbitHole.category) == category.lower())
+        return stmt
 
     def list_by_category(
         self, category: str, limit: int = 20, offset: int = 0

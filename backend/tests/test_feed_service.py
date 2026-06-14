@@ -70,3 +70,16 @@ def test_priority_category_boost(settings):
 
     feed = repo.list_feed(limit=10)
     assert feed[0].title == "priority"
+
+
+def test_engineering_ranks_above_biology(settings):
+    repo = FakeRabbitHoleRepo()
+    repo.items = [
+        _rh("bio article", "biology", 8, 8),
+        _rh("eng article", "engineering", 8, 8),
+    ]
+    service = FeedService(repo, settings)
+    service.generate_daily_feed()
+
+    feed = repo.list_feed(limit=10)
+    assert feed[0].title == "eng article"

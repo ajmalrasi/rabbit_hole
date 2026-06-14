@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     # Scheduled runs still use one batch per cycle to keep Jetson runs bounded.
     pipeline_drain_on_process: bool = True
     run_on_startup: bool = False
-    daily_feed_size: int = 20
+    daily_feed_size: int = 50
 
     # ----- RSS cache -----
     # Directory for on-disk feed cache. Set to "" to disable caching.

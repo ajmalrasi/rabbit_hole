@@ -11,7 +11,7 @@ Rabbit Hole is not a news summarizer. It reveals the invisible systems — physi
 | Path | Description |
 | ---- | ----------- |
 | [`backend/`](backend/) | FastAPI backend (RSS ingestion, LLM pipeline, REST API, Docker) |
-| Android app | *(planned)* |
+| [`android/`](android/) | Android app (Kotlin, Jetpack Compose, offline-first) |
 
 ## Quick start
 
@@ -24,3 +24,5 @@ docker compose up -d --build
 ```
 
 API: `http://192.168.3.30:8000` · Docs: `/docs`
+
+For the mobile client, see [`android/README.md`](android/README.md).

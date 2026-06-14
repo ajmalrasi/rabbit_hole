@@ -20,10 +20,11 @@ from database.repositories.article_repo import ArticleRepository
 from database.repositories.rabbit_hole_repo import RabbitHoleRepository
 from database.session import session_scope
 from models.article import ArticleStatus
-from services.curiosity_service import CuriosityService
+from services.curiosity_service import CuriosityService, ScoreOutcome
 from services.embedding_service import EmbeddingService
 from services.feed_service import FeedService
 from services.llm.factory import get_embedding_provider, get_llm_provider
+from services.pipeline_state import pipeline_state
 from services.rabbit_hole_service import RabbitHoleService
 from services.rss_service import make_rss_service
 
@@ -60,6 +61,9 @@ class ContentPipeline:
     async def score_pending(self, result: PipelineResult, *, drain: bool = False) -> None:
         """Score NEW articles. When ``drain`` is True, repeat until none remain."""
         batch = self._settings.max_articles_per_run
+        with session_scope() as session:
+            total = ArticleRepository(session).count_by_status(ArticleStatus.NEW)
+        pipeline_state.set_stage("scoring", total=total)
         while True:
             with session_scope() as session:
                 repo = ArticleRepository(session)
@@ -69,10 +73,17 @@ class ContentPipeline:
                     break
                 logger.info("Scoring %d new articles", len(articles))
                 for article in articles:
-                    passed = await service.score_and_gate(article)
+                    outcome = await service.score_and_gate(article)
+                    if outcome == ScoreOutcome.RETRY:
+                        continue
                     result.scored += 1
-                    result.passed += int(passed)
-                    result.rejected += int(not passed)
+                    result.passed += int(outcome == ScoreOutcome.PASSED)
+                    result.rejected += int(outcome == ScoreOutcome.REJECTED)
+                    pipeline_state.advance(
+                        passed=int(outcome == ScoreOutcome.PASSED),
+                        rejected=int(outcome == ScoreOutcome.REJECTED),
+                        scored=1,
+                    )
                     session.commit()
             if not drain or len(articles) < batch:
                 break
@@ -80,6 +91,9 @@ class ContentPipeline:
     async def generate_pending(self, result: PipelineResult, *, drain: bool = False) -> None:
         """Generate rabbit holes for SCORED articles. When ``drain`` is True, loop."""
         batch = self._settings.max_articles_per_run
+        with session_scope() as session:
+            total = ArticleRepository(session).count_by_status(ArticleStatus.SCORED)
+        pipeline_state.set_stage("generating", total=total)
         while True:
             with session_scope() as session:
                 article_repo = ArticleRepository(session)
@@ -102,18 +116,24 @@ class ContentPipeline:
                     rabbit_hole = await generator.generate_for_article(article)
                     if rabbit_hole is not None:
                         result.generated += 1
+                        pipeline_state.advance(generated=1)
                     elif article.status == ArticleStatus.DUPLICATE:
                         result.duplicates += 1
+                        pipeline_state.advance(duplicates=1)
                     else:
                         result.failed += 1
+                        pipeline_state.advance(failed=1)
                     session.commit()
             if not drain or len(articles) < batch:
                 break
 
     def rebuild_feed(self, result: PipelineResult) -> None:
+        pipeline_state.set_stage("rebuilding_feed", total=1)
         with session_scope() as session:
             feed_service = FeedService(RabbitHoleRepository(session), self._settings)
             result.feed_size = feed_service.generate_daily_feed()
+        pipeline_state.advance(processed=1)
+        pipeline_state.set_counter(feed_size=result.feed_size)
 
     async def run(
         self,
@@ -135,34 +155,44 @@ class ContentPipeline:
             drain = self._settings.pipeline_drain_on_process
 
         result = PipelineResult()
+        pipeline_state.start_run(drain=drain)
         logger.info("=== Pipeline run started (drain=%s) ===", drain)
 
-        if do_ingest:
-            try:
-                result.ingested = await self.ingest()
-            except Exception as exc:
-                logger.exception("Ingestion stage failed")
-                result.errors.append(f"ingest: {exc}")
-
-        if do_score:
-            try:
-                await self.score_pending(result, drain=drain)
-            except Exception as exc:
-                logger.exception("Scoring stage failed")
-                result.errors.append(f"score: {exc}")
-
-        if do_generate:
-            try:
-                await self.generate_pending(result, drain=drain)
-            except Exception as exc:
-                logger.exception("Generation stage failed")
-                result.errors.append(f"generate: {exc}")
-
         try:
-            self.rebuild_feed(result)
-        except Exception as exc:
-            logger.exception("Feed stage failed")
-            result.errors.append(f"feed: {exc}")
+            if do_ingest:
+                pipeline_state.set_stage("ingesting")
+                try:
+                    result.ingested = await self.ingest()
+                    pipeline_state.set_counter(ingested=result.ingested)
+                except Exception as exc:
+                    logger.exception("Ingestion stage failed")
+                    result.errors.append(f"ingest: {exc}")
+                    pipeline_state.add_error(f"ingest: {exc}")
+
+            if do_score:
+                try:
+                    await self.score_pending(result, drain=drain)
+                except Exception as exc:
+                    logger.exception("Scoring stage failed")
+                    result.errors.append(f"score: {exc}")
+                    pipeline_state.add_error(f"score: {exc}")
+
+            if do_generate:
+                try:
+                    await self.generate_pending(result, drain=drain)
+                except Exception as exc:
+                    logger.exception("Generation stage failed")
+                    result.errors.append(f"generate: {exc}")
+                    pipeline_state.add_error(f"generate: {exc}")
+
+            try:
+                self.rebuild_feed(result)
+            except Exception as exc:
+                logger.exception("Feed stage failed")
+                result.errors.append(f"feed: {exc}")
+                pipeline_state.add_error(f"feed: {exc}")
+        finally:
+            pipeline_state.finish(summary=result.as_dict())
 
         logger.info("=== Pipeline run finished: %s ===", result.as_dict())
         return result

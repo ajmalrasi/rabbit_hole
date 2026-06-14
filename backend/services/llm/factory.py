@@ -60,9 +60,22 @@ def get_embedding_provider() -> LLMProvider:
     return _build_provider(settings.embedding_provider, settings)
 
 
+@lru_cache
+def get_chat_provider() -> LLMProvider:
+    """Provider for follow-up Q&A — prefers OpenAI (ChatGPT) when configured."""
+    settings = get_settings()
+    if settings.openai_api_key:
+        logger.info("Initialising chat provider: openai (%s)", settings.openai_model)
+        return _build_provider("openai", settings)
+    logger.info(
+        "OpenAI key not set; chat provider falls back to %s", settings.llm_provider
+    )
+    return get_llm_provider()
+
+
 async def close_providers() -> None:
     """Close cached providers on application shutdown."""
-    for getter in (get_llm_provider, get_embedding_provider):
+    for getter in (get_llm_provider, get_embedding_provider, get_chat_provider):
         try:
             provider = getter()
         except Exception:  # pragma: no cover - defensive
@@ -70,3 +83,4 @@ async def close_providers() -> None:
         await provider.aclose()
     get_llm_provider.cache_clear()
     get_embedding_provider.cache_clear()
+    get_chat_provider.cache_clear()

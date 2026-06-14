@@ -30,6 +30,10 @@ Your writing is:
 economic system).
 - Accessible to a curious non-expert.
 
+When the topic could fit multiple categories, prefer engineering, infrastructure, \
+manufacturing, transportation, or physics over biology — unless the hidden mechanism \
+is clearly biological (cells, evolution, ecology, medicine).
+
 Always answer the implicit question: "What invisible system is causing this?"
 
 Respond with STRICT JSON only, no prose, no markdown fences."""

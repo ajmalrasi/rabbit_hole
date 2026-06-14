@@ -16,8 +16,9 @@ from database.repositories.rabbit_hole_repo import RabbitHoleRepository
 from database.session import get_db
 from services.embedding_service import EmbeddingService
 from services.feed_service import FeedService
+from services.chat_service import ChatService
 from services.llm.base import LLMProvider
-from services.llm.factory import get_embedding_provider
+from services.llm.factory import get_embedding_provider, get_chat_provider
 
 SessionDep = Annotated[Session, Depends(get_db)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -55,3 +56,10 @@ def get_embedding_service(
 
 FeedServiceDep = Annotated[FeedService, Depends(get_feed_service)]
 EmbeddingServiceDep = Annotated[EmbeddingService, Depends(get_embedding_service)]
+
+
+def get_chat_service(settings: SettingsDep) -> ChatService:
+    return ChatService(settings, get_chat_provider())
+
+
+ChatServiceDep = Annotated[ChatService, Depends(get_chat_service)]

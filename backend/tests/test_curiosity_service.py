@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 
 from models.article import ArticleStatus
-from services.curiosity_service import CuriosityService
+from services.curiosity_service import CuriosityService, ScoreOutcome
 from tests.conftest import FakeLLMProvider
 
 
@@ -24,7 +24,7 @@ async def test_high_score_passes_gate(settings, article):
 
     passed = await service.score_and_gate(article)
 
-    assert passed is True
+    assert passed == ScoreOutcome.PASSED
     assert article.status == ArticleStatus.SCORED
     assert article.curiosity_score == 9
     assert article.hidden_mechanism_score == 8.5
@@ -46,7 +46,7 @@ async def test_low_score_is_rejected(settings, article):
 
     passed = await service.score_and_gate(article)
 
-    assert passed is False
+    assert passed == ScoreOutcome.REJECTED
     assert article.status == ArticleStatus.REJECTED
     assert article.rejection_reason == "celebrity gossip"
 
@@ -59,15 +59,23 @@ async def test_mixed_score_below_one_threshold_rejected(settings, article):
         ]
     )
     service = CuriosityService(llm, settings)
-    assert await service.score_and_gate(article) is False
+    assert await service.score_and_gate(article) == ScoreOutcome.REJECTED
     assert article.status == ArticleStatus.REJECTED
 
 
 async def test_malformed_response_defaults_to_rejected(settings, article):
     llm = FakeLLMProvider(generate_responses=["not json at all"])
     service = CuriosityService(llm, settings)
-    assert await service.score_and_gate(article) is False
-    assert article.status == ArticleStatus.REJECTED
+    assert await service.score_and_gate(article) == ScoreOutcome.RETRY
+    assert article.status == ArticleStatus.NEW
+
+
+async def test_llm_error_leaves_article_new_for_retry(settings, article):
+    llm = FakeLLMProvider(generate_errors=[RuntimeError("ollama 500")])
+    service = CuriosityService(llm, settings)
+    assert await service.score_and_gate(article) == ScoreOutcome.RETRY
+    assert article.status == ArticleStatus.NEW
+    assert article.rejection_reason is None
 
 
 async def test_scores_are_clamped(settings, article):

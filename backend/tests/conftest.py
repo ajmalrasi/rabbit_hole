@@ -28,8 +28,10 @@ class FakeLLMProvider(LLMProvider):
         self,
         generate_responses: list[str] | None = None,
         embedding: list[float] | None = None,
+        generate_errors: list[Exception] | None = None,
     ) -> None:
         self._responses = list(generate_responses or [])
+        self._errors = list(generate_errors or [])
         self._embedding = embedding or [0.0] * 768
         self.generate_calls: list[str] = []
         self.embed_calls: list[str] = []
@@ -43,6 +45,8 @@ class FakeLLMProvider(LLMProvider):
         json_mode: bool = False,
     ) -> str:
         self.generate_calls.append(prompt)
+        if self._errors:
+            raise self._errors.pop(0)
         if self._responses:
             return self._responses.pop(0)
         return "{}"
